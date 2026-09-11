@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { analyzeCaptureQuality } from "@/lib/capture-quality";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 
@@ -15,6 +15,19 @@ export function GuidedCapture({ readingId }: Props) {
   const [status, setStatus] = useState("Haz una foto nítida de la palma completa, con luz uniforme y sin sombras fuertes.");
   const [issues, setIssues] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    function handleRecapture(event: Event) {
+      const detail = (event as CustomEvent<{ handSide?: HandSide }>).detail;
+      if (detail?.handSide === "left" || detail?.handSide === "right") {
+        setHandSide(detail.handSide);
+        setIssues([]);
+        setStatus(`Sustituye ahora la captura de la mano ${detail.handSide === "left" ? "izquierda" : "derecha"}.`);
+      }
+    }
+    window.addEventListener("quiromante:recapture", handleRecapture);
+    return () => window.removeEventListener("quiromante:recapture", handleRecapture);
+  }, []);
 
   async function upload(file: File) {
     setIssues([]);
@@ -94,7 +107,7 @@ export function GuidedCapture({ readingId }: Props) {
   }
 
   return (
-    <section className="card grid">
+    <section id="guided-capture" className="card grid">
       <div>
         <span className="badge">M2 · Captura guiada</span>
         <h2>Fotografía de la palma</h2>
