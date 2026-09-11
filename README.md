@@ -21,7 +21,7 @@ PWA de análisis quiromántico asistido por IA, estructurada para separar observ
 
 ## M2 — Captura
 
-Objetivo: capturar imágenes de ambas palmas desde móvil, mantenerlas privadas y preparar una validación técnica previa al análisis.
+Objetivo: capturar imágenes de ambas palmas desde móvil, mantenerlas privadas y validar técnicamente la calidad antes del análisis.
 
 Incluye en esta rama:
 
@@ -32,11 +32,13 @@ Incluye en esta rama:
 - rutas de Storage segregadas por usuario y lectura;
 - upload intents firmados;
 - registro `reading_images` protegido por RLS;
-- estado de lectura `capturing` durante la captura;
-- estado de validación de imagen preparado (`pending`, `accepted`, `rejected`).
+- control local de resolución, exposición, contraste, nitidez y proporción de encuadre;
+- rechazo previo y recaptura cuando la imagen no supera el control técnico;
+- transición `capturing` → `validating` → `ready` cuando hay palmas izquierda y derecha válidas;
+- trazabilidad básica de métricas de calidad en `validation_notes`.
 
 Para activar Supabase en local copia `apps/web/.env.example` a `.env.local`, completa las credenciales y aplica las migraciones antes de ejecutar `npm install && npm run dev`.
 
 ## Siguiente paso M2
 
-Añadir validación automática básica de calidad (resolución, desenfoque, iluminación y encuadre), gestión de recaptura y transición de la lectura a `ready` cuando se cumpla el mínimo de evidencias exigido.
+Añadir sustitución explícita de capturas, previsualización segura de imágenes privadas y preparar la interfaz/contrato para la validación anatómica posterior del servicio de visión.
