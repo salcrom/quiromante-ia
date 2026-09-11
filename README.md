@@ -6,7 +6,7 @@ PWA de análisis quiromántico asistido por IA, estructurada para separar observ
 
 - BOOT-001 — Foundation: integrado en `main`.
 - M1 — Expedientes, Auth y RLS: integrado en `main`.
-- M2 — Captura: en desarrollo (`feature/m2-captura`).
+- M2 — Captura + Vision: en desarrollo (`feature/m2-vision-worker`).
 
 ## Stack
 
@@ -19,30 +19,40 @@ PWA de análisis quiromántico asistido por IA, estructurada para separar observ
 - servicios `vision`, `interpretation` y `reporting` desacoplados
 - contratos compartidos con Zod
 
-## M2 — Captura
+## M2 — Captura y validación Vision
 
-Objetivo: capturar imágenes de ambas palmas desde móvil, mantenerlas privadas y validar técnicamente la calidad antes del análisis.
-
-Incluye en esta rama:
+Incluye:
 
 - cámara/selector de imagen con `capture="environment"`;
 - selección de mano izquierda/derecha;
 - máximo 15 MB y formatos JPEG, PNG, WebP, HEIC y HEIF;
-- bucket privado `reading-images`;
-- rutas de Storage segregadas por usuario y lectura;
+- bucket privado `reading-images` y rutas segregadas por usuario/lectura;
 - upload intents firmados;
-- registro `reading_images` protegido por RLS;
-- control local de resolución, exposición, contraste, nitidez y proporción de encuadre;
-- rechazo previo y recaptura cuando la imagen no supera el control técnico;
-- transición `capturing` → `validating` → `ready` cuando hay palmas izquierda y derecha válidas;
-- trazabilidad básica de métricas de calidad en `validation_notes`;
-- previsualización de capturas mediante URLs firmadas temporales;
-- eliminación segura de captura en Storage y base de datos;
-- sustitución guiada que devuelve la lectura a `capturing` cuando falta una evidencia válida;
-- contrato Zod `VisionPalmValidationRequest/Result` para la futura validación anatómica del servicio Vision.
+- control local de resolución, exposición, contraste, nitidez y encuadre;
+- previsualizaciones mediante URLs firmadas temporales;
+- sustitución y eliminación de capturas;
+- cola `image_validation_runs` para validación anatómica;
+- worker protegido que reclama trabajos en cola, descarga la imagen privada con credenciales de servicio y ejecuta un modelo Vision;
+- validación de respuesta con Zod y persistencia del resultado anatómico;
+- comprobación de palma, cinco dedos, muñeca/base, lateralidad, oclusiones y perspectiva;
+- estados anatómicos `pending`, `running`, `accepted`, `rejected` y `failed`;
+- la lectura solo pasa a `ready` cuando ambas palmas superan calidad técnica y validación anatómica.
 
-Para activar Supabase en local copia `apps/web/.env.example` a `.env.local`, completa las credenciales y aplica las migraciones antes de ejecutar `npm install && npm run dev`.
+## Configuración del worker
+
+Copia `apps/web/.env.example` a `.env.local` y completa las variables. `SUPABASE_SERVICE_ROLE_KEY`, `OPENAI_API_KEY` y `VISION_WORKER_SECRET` son exclusivamente de servidor y nunca deben exponerse al navegador.
+
+`OPENAI_VISION_MODEL` se deja configurable para no acoplar la aplicación a un modelo concreto.
+
+El worker procesa un trabajo por llamada mediante:
+
+```text
+POST /api/internal/vision/worker
+Authorization: Bearer <VISION_WORKER_SECRET>
+```
+
+Puede invocarse desde un cron/runner de confianza. Si no hay trabajos pendientes devuelve estado `idle`.
 
 ## Siguiente paso M2
 
-Conectar el servicio `vision` al contrato anatómico: detectar palma completa, lateralidad, dedos, muñeca, oclusiones y perspectiva; persistir el resultado del validador y decidir si una captura pasa a análisis o requiere nueva toma.
+Cerrar el ciclo operativo del worker: automatizar su ejecución programada, añadir reintentos/backoff y mostrar en UI los motivos concretos de rechazo anatómico para guiar la recaptura.
