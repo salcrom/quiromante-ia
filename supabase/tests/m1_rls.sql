@@ -1,0 +1,7 @@
+-- M1 manual RLS verification checklist.
+-- Run against a disposable/local Supabase database with two auth users.
+-- 1. As user A, insert public.persons(owner_user_id = auth.uid(), alias = 'A') -> allowed.
+-- 2. As user B, select/update/delete user A person -> zero rows / denied.
+-- 3. As user A, create a reading for own person -> allowed.
+-- 4. As user B, create/read/update/delete a reading under user A person -> denied by RLS.
+-- 5. As anon, persons/readings access -> denied.
