@@ -5,17 +5,27 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 export type VisionWorkerOutcome =
   | { status: "idle" }
   | { status: "completed"; runId: string; imageId: string; accepted: boolean }
+  | { status: "retry_scheduled"; runId: string; imageId?: string; attempt: number; nextAttemptAt: string; error: string }
   | { status: "failed"; runId: string; imageId?: string; error: string };
+
+function retryDelayMs(attempt: number) {
+  const baseMs = 60_000;
+  const cappedAttempt = Math.min(Math.max(attempt, 1), 6);
+  return baseMs * 2 ** (cappedAttempt - 1);
+}
 
 export async function processNextVisionJob(): Promise<VisionWorkerOutcome> {
   const supabase = createSupabaseAdminClient();
   if (!supabase) throw new Error("VISION_WORKER_SUPABASE_NOT_CONFIGURED");
 
+  const nowIso = new Date().toISOString();
   const { data: queued, error: queueError } = await supabase
     .from("image_validation_runs")
-    .select("id,reading_image_id,reading_id,owner_user_id,status,request_payload,created_at")
+    .select("id,reading_image_id,reading_id,owner_user_id,status,request_payload,created_at,attempt_count,max_attempts,next_attempt_at")
     .eq("validator_kind", "anatomical_palm")
     .eq("status", "queued")
+    .lte("next_attempt_at", nowIso)
+    .order("next_attempt_at", { ascending: true })
     .order("created_at", { ascending: true })
     .limit(1)
     .maybeSingle();
@@ -23,10 +33,17 @@ export async function processNextVisionJob(): Promise<VisionWorkerOutcome> {
   if (queueError) throw new Error(`VISION_QUEUE_READ_FAILED:${queueError.message}`);
   if (!queued) return { status: "idle" };
 
-  const now = new Date().toISOString();
+  const attempt = Number(queued.attempt_count ?? 0) + 1;
+  const maxAttempts = Number(queued.max_attempts ?? 3);
+  const startedAt = new Date().toISOString();
   const { data: claimed, error: claimError } = await supabase
     .from("image_validation_runs")
-    .update({ status: "running", started_at: now, error_summary: null })
+    .update({
+      status: "running",
+      started_at: startedAt,
+      attempt_count: attempt,
+      error_summary: null,
+    })
     .eq("id", queued.id)
     .eq("status", "queued")
     .select("id")
@@ -80,6 +97,7 @@ export async function processNextVisionJob(): Promise<VisionWorkerOutcome> {
         result_payload: result,
         completed_at: completedAt,
         error_summary: null,
+        next_attempt_at: completedAt,
       })
       .eq("id", queued.id);
 
@@ -112,11 +130,44 @@ export async function processNextVisionJob(): Promise<VisionWorkerOutcome> {
     return { status: "completed", runId: queued.id, imageId: image.id, accepted: result.accepted };
   } catch (error) {
     const message = error instanceof Error ? error.message : "VISION_WORKER_UNKNOWN_ERROR";
-    const completedAt = new Date().toISOString();
+    const failedAt = new Date();
+    const terminal = attempt >= maxAttempts;
 
+    if (!terminal) {
+      const nextAttemptAt = new Date(failedAt.getTime() + retryDelayMs(attempt)).toISOString();
+      await supabase
+        .from("image_validation_runs")
+        .update({
+          status: "queued",
+          error_summary: message.slice(0, 1000),
+          last_error_at: failedAt.toISOString(),
+          next_attempt_at: nextAttemptAt,
+          completed_at: null,
+        })
+        .eq("id", queued.id);
+
+      await supabase
+        .from("reading_images")
+        .update({ anatomical_validation_status: "pending" })
+        .eq("id", imageId);
+
+      await supabase
+        .from("readings")
+        .update({ status: "validating", updated_at: failedAt.toISOString() })
+        .eq("id", queued.reading_id);
+
+      return { status: "retry_scheduled", runId: queued.id, imageId, attempt, nextAttemptAt, error: message };
+    }
+
+    const completedAt = failedAt.toISOString();
     await supabase
       .from("image_validation_runs")
-      .update({ status: "failed", error_summary: message.slice(0, 1000), completed_at: completedAt })
+      .update({
+        status: "failed",
+        error_summary: message.slice(0, 1000),
+        last_error_at: completedAt,
+        completed_at: completedAt,
+      })
       .eq("id", queued.id);
 
     await supabase
