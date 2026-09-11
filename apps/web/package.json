@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@quiromante/contracts": "0.1.0",
+    "@quiromante/service-vision": "0.1.0",
     "@supabase/ssr": "^0.7.0",
     "@supabase/supabase-js": "^2.0.0",
     "next": "16.3.4",
