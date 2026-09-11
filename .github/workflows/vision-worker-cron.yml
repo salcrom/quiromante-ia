@@ -1,0 +1,74 @@
+name: Vision Worker Cron
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: vision-worker-cron
+  cancel-in-progress: false
+
+jobs:
+  drain-queue:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Validate configuration
+        env:
+          VISION_WORKER_URL: ${{ secrets.VISION_WORKER_URL }}
+          VISION_WORKER_SECRET: ${{ secrets.VISION_WORKER_SECRET }}
+        run: |
+          test -n "$VISION_WORKER_URL"
+          test -n "$VISION_WORKER_SECRET"
+
+      - name: Process queued Vision jobs
+        env:
+          VISION_WORKER_URL: ${{ secrets.VISION_WORKER_URL }}
+          VISION_WORKER_SECRET: ${{ secrets.VISION_WORKER_SECRET }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          endpoint="${VISION_WORKER_URL%/}/api/internal/vision/worker"
+
+          for attempt in $(seq 1 10); do
+            response_file="$(mktemp)"
+            http_code="$({ curl --silent --show-error \
+              --connect-timeout 10 \
+              --max-time 90 \
+              --output "$response_file" \
+              --write-out "%{http_code}" \
+              --request POST \
+              --header "Authorization: Bearer ${VISION_WORKER_SECRET}" \
+              "$endpoint"; } || true)"
+
+            body="$(cat "$response_file")"
+            rm -f "$response_file"
+
+            echo "worker_call=$attempt http_status=$http_code"
+
+            if [[ "$http_code" != "200" && "$http_code" != "202" ]]; then
+              echo "Vision worker returned an unexpected HTTP status."
+              echo "$body"
+              exit 1
+            fi
+
+            status="$(printf '%s' "$body" | jq -r '.data.status // empty')"
+
+            if [[ "$status" == "idle" ]]; then
+              echo "Vision queue is empty."
+              exit 0
+            fi
+
+            if [[ "$status" == "retry_scheduled" ]]; then
+              echo "A retry was scheduled with backoff; stopping this drain cycle."
+              exit 0
+            fi
+
+            if [[ "$status" == "failed" ]]; then
+              echo "A Vision job reached terminal failure; continuing with any remaining queued jobs."
+            fi
+          done
+
+          echo "Processed the per-run safety limit of 10 jobs. Remaining work will continue on the next schedule."
