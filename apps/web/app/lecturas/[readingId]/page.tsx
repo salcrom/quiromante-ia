@@ -23,14 +23,20 @@ export default async function ReadingPage({ params }: { params: Promise<{ readin
     supabase.from("persons").select("alias").eq("id", reading.person_id).single(),
     supabase
       .from("reading_images")
-      .select("id,hand_side,image_role,validation_status,width,height,storage_path,created_at")
+      .select("id,hand_side,image_role,validation_status,anatomical_validation_status,width,height,storage_path,created_at")
       .eq("reading_id", readingId)
       .order("created_at", { ascending: true }),
   ]);
 
-  const acceptedSides = new Set(
+  const technicallyAcceptedSides = new Set(
     (images ?? [])
       .filter((image) => image.image_role === "palm" && image.validation_status === "accepted")
+      .map((image) => image.hand_side),
+  );
+
+  const anatomicallyAcceptedSides = new Set(
+    (images ?? [])
+      .filter((image) => image.image_role === "palm" && image.validation_status === "accepted" && image.anatomical_validation_status === "accepted")
       .map((image) => image.hand_side),
   );
 
@@ -41,6 +47,7 @@ export default async function ReadingPage({ params }: { params: Promise<{ readin
       handSide: image.hand_side as "left" | "right" | "unknown",
       imageRole: image.image_role,
       validationStatus: image.validation_status,
+      anatomicalValidationStatus: image.anatomical_validation_status,
       width: image.width,
       height: image.height,
       previewUrl: data?.signedUrl ?? null,
@@ -58,8 +65,10 @@ export default async function ReadingPage({ params }: { params: Promise<{ readin
 
       <section className="card grid">
         <strong>Requisitos de captura</strong>
-        <span>{acceptedSides.has("left") ? "✓" : "○"} Palma izquierda validada</span>
-        <span>{acceptedSides.has("right") ? "✓" : "○"} Palma derecha validada</span>
+        <span>{technicallyAcceptedSides.has("left") ? "✓" : "○"} Palma izquierda · calidad técnica</span>
+        <span>{technicallyAcceptedSides.has("right") ? "✓" : "○"} Palma derecha · calidad técnica</span>
+        <span>{anatomicallyAcceptedSides.has("left") ? "✓" : "○"} Palma izquierda · validación anatómica Vision</span>
+        <span>{anatomicallyAcceptedSides.has("right") ? "✓" : "○"} Palma derecha · validación anatómica Vision</span>
         <span>{reading.status === "ready" ? "✓ Lectura lista para análisis" : "Faltan evidencias válidas para continuar"}</span>
       </section>
 
