@@ -20,8 +20,18 @@ export default async function ReadingPage({ params }: { params: Promise<{ readin
 
   const [{ data: person }, { data: images }] = await Promise.all([
     supabase.from("persons").select("alias").eq("id", reading.person_id).single(),
-    supabase.from("reading_images").select("id,hand_side,image_role,validation_status,created_at").eq("reading_id", readingId).order("created_at", { ascending: true }),
+    supabase
+      .from("reading_images")
+      .select("id,hand_side,image_role,validation_status,width,height,created_at")
+      .eq("reading_id", readingId)
+      .order("created_at", { ascending: true }),
   ]);
+
+  const acceptedSides = new Set(
+    (images ?? [])
+      .filter((image) => image.image_role === "palm" && image.validation_status === "accepted")
+      .map((image) => image.hand_side),
+  );
 
   return (
     <main className="grid">
@@ -32,12 +42,23 @@ export default async function ReadingPage({ params }: { params: Promise<{ readin
         <p>{new Intl.DateTimeFormat("es-ES", { dateStyle: "long", timeStyle: "short" }).format(new Date(reading.reading_date))}</p>
       </section>
 
+      <section className="card grid">
+        <strong>Requisitos de captura</strong>
+        <span>{acceptedSides.has("left") ? "✓" : "○"} Palma izquierda validada</span>
+        <span>{acceptedSides.has("right") ? "✓" : "○"} Palma derecha validada</span>
+        <span>{reading.status === "ready" ? "✓ Lectura lista para análisis" : "Faltan evidencias válidas para continuar"}</span>
+      </section>
+
       <GuidedCapture readingId={readingId} />
 
       <section className="card grid">
         <strong>Capturas registradas</strong>
         {images?.length ? images.map((image) => (
-          <span key={image.id}>✓ {image.hand_side === "left" ? "Mano izquierda" : "Mano derecha"} · {image.image_role} · {image.validation_status}</span>
+          <span key={image.id}>
+            {image.validation_status === "accepted" ? "✓" : image.validation_status === "rejected" ? "✕" : "…"}{" "}
+            {image.hand_side === "left" ? "Mano izquierda" : "Mano derecha"} · {image.image_role} · {image.validation_status}
+            {image.width && image.height ? ` · ${image.width}×${image.height}` : ""}
+          </span>
         )) : <p>Aún no hay fotografías registradas para esta lectura.</p>}
       </section>
     </main>

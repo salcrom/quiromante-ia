@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { analyzeCaptureQuality } from "@/lib/capture-quality";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 
 type HandSide = "left" | "right";
@@ -12,9 +13,11 @@ type Props = {
 export function GuidedCapture({ readingId }: Props) {
   const [handSide, setHandSide] = useState<HandSide>("left");
   const [status, setStatus] = useState("Haz una foto nítida de la palma completa, con luz uniforme y sin sombras fuertes.");
+  const [issues, setIssues] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
 
   async function upload(file: File) {
+    setIssues([]);
     if (file.size > 15 * 1024 * 1024) {
       setStatus("La imagen supera el máximo de 15 MB.");
       return;
@@ -25,8 +28,16 @@ export function GuidedCapture({ readingId }: Props) {
     }
 
     setBusy(true);
-    setStatus("Preparando subida segura…");
     try {
+      setStatus("Comprobando nitidez, luz, resolución y encuadre…");
+      const quality = await analyzeCaptureQuality(file);
+      if (!quality.accepted) {
+        setIssues(quality.issues);
+        setStatus("La foto no supera el control de calidad. Corrige estos puntos y vuelve a capturarla.");
+        return;
+      }
+
+      setStatus("Calidad correcta. Preparando subida segura…");
       const intentResponse = await fetch(`/api/readings/${readingId}/images`, {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -43,7 +54,7 @@ export function GuidedCapture({ readingId }: Props) {
         .uploadToSignedUrl(intentPayload.data.path, intentPayload.data.token, file, { contentType: file.type });
       if (uploadError) throw uploadError;
 
-      setStatus("Registrando captura…");
+      setStatus("Validando y registrando captura…");
       const confirmResponse = await fetch(`/api/readings/${readingId}/images`, {
         method: "PUT",
         headers: { "content-type": "application/json" },
@@ -54,15 +65,29 @@ export function GuidedCapture({ readingId }: Props) {
           mimeType: file.type,
           byteSize: file.size,
           storagePath: intentPayload.data.path,
+          width: quality.width,
+          height: quality.height,
+          validationStatus: "accepted",
+          quality: {
+            brightness: quality.brightness,
+            contrast: quality.contrast,
+            sharpness: quality.sharpness,
+            aspectRatio: quality.aspectRatio,
+            issues: quality.issues,
+          },
         }),
       });
       const confirmPayload = await confirmResponse.json();
       if (!confirmResponse.ok) throw new Error(confirmPayload?.error?.message ?? "No se pudo registrar la captura");
 
-      setStatus(`✓ Palma ${handSide === "left" ? "izquierda" : "derecha"} guardada. Puedes capturar la otra mano.`);
+      const ready = confirmPayload.data?.readingStatus === "ready";
+      setStatus(ready
+        ? "✓ Ambas palmas cumplen los requisitos. La lectura está lista para análisis."
+        : `✓ Palma ${handSide === "left" ? "izquierda" : "derecha"} validada. Captura ahora la otra mano.`);
       setHandSide((current) => current === "left" ? "right" : "left");
+      window.setTimeout(() => window.location.reload(), 700);
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Error inesperado al subir la imagen");
+      setStatus(error instanceof Error ? error.message : "Error inesperado al procesar la imagen");
     } finally {
       setBusy(false);
     }
@@ -74,6 +99,11 @@ export function GuidedCapture({ readingId }: Props) {
         <span className="badge">M2 · Captura guiada</span>
         <h2>Fotografía de la palma</h2>
         <p>{status}</p>
+        {issues.length > 0 ? (
+          <ul>
+            {issues.map((issue) => <li key={issue}>{issue}</li>)}
+          </ul>
+        ) : null}
       </div>
       <div className="grid">
         <label>
@@ -99,7 +129,7 @@ export function GuidedCapture({ readingId }: Props) {
           />
         </label>
       </div>
-      <small>Consejo: encuadra desde la muñeca hasta la punta de los dedos, mantén la mano plana y evita reflejos.</small>
+      <small>Control previo local: resolución, exposición, contraste, nitidez y proporción de encuadre. La detección anatómica de la palma llegará en la fase de visión.</small>
     </section>
   );
 }

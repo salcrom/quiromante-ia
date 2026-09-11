@@ -17,6 +17,7 @@ export const ReadingStatusSchema = z.enum([
 ]);
 export const ImageRoleSchema = z.enum(["palm", "thumb", "edge", "detail"]);
 export const CaptureMimeTypeSchema = z.enum(["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif"]);
+export const ImageValidationStatusSchema = z.enum(["pending", "accepted", "rejected"]);
 
 export const CreatePersonSchema = z.object({
   alias: z.string().trim().min(1).max(120),
@@ -43,10 +44,20 @@ export const CreateUploadIntentSchema = z.object({
   byteSize: z.number().int().positive().max(15 * 1024 * 1024),
 });
 
+export const CaptureQualitySchema = z.object({
+  brightness: z.number().min(0).max(255),
+  contrast: z.number().nonnegative(),
+  sharpness: z.number().nonnegative(),
+  aspectRatio: z.number().positive(),
+  issues: z.array(z.string().trim().min(1).max(180)).max(8),
+});
+
 export const RegisterReadingImageSchema = CreateUploadIntentSchema.extend({
   storagePath: z.string().min(1).max(500),
-  width: z.number().int().positive().optional(),
-  height: z.number().int().positive().optional(),
+  width: z.number().int().positive(),
+  height: z.number().int().positive(),
+  validationStatus: ImageValidationStatusSchema,
+  quality: CaptureQualitySchema,
 });
 
 export type CreatePersonRequest = z.infer<typeof CreatePersonSchema>;
@@ -54,6 +65,7 @@ export type UpdatePersonRequest = z.infer<typeof UpdatePersonSchema>;
 export type CreateReadingRequest = z.infer<typeof CreateReadingSchema>;
 export type CreateUploadIntentRequest = z.infer<typeof CreateUploadIntentSchema>;
 export type RegisterReadingImageRequest = z.infer<typeof RegisterReadingImageSchema>;
+export type CaptureQuality = z.infer<typeof CaptureQualitySchema>;
 export type HandSide = z.infer<typeof HandSideSchema>;
 export type ReadingMode = z.infer<typeof ReadingModeSchema>;
 export type ReadingStatus = z.infer<typeof ReadingStatusSchema>;
