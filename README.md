@@ -35,10 +35,14 @@ Incluye en esta rama:
 - control local de resolución, exposición, contraste, nitidez y proporción de encuadre;
 - rechazo previo y recaptura cuando la imagen no supera el control técnico;
 - transición `capturing` → `validating` → `ready` cuando hay palmas izquierda y derecha válidas;
-- trazabilidad básica de métricas de calidad en `validation_notes`.
+- trazabilidad básica de métricas de calidad en `validation_notes`;
+- previsualización de capturas mediante URLs firmadas temporales;
+- eliminación segura de captura en Storage y base de datos;
+- sustitución guiada que devuelve la lectura a `capturing` cuando falta una evidencia válida;
+- contrato Zod `VisionPalmValidationRequest/Result` para la futura validación anatómica del servicio Vision.
 
 Para activar Supabase en local copia `apps/web/.env.example` a `.env.local`, completa las credenciales y aplica las migraciones antes de ejecutar `npm install && npm run dev`.
 
 ## Siguiente paso M2
 
-Añadir sustitución explícita de capturas, previsualización segura de imágenes privadas y preparar la interfaz/contrato para la validación anatómica posterior del servicio de visión.
+Conectar el servicio `vision` al contrato anatómico: detectar palma completa, lateralidad, dedos, muñeca, oclusiones y perspectiva; persistir el resultado del validador y decidir si una captura pasa a análisis o requiere nueva toma.
