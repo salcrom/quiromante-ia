@@ -13,7 +13,7 @@ export async function POST(
 
   const { data: image } = await supabase
     .from("reading_images")
-    .select("id,reading_id,owner_user_id,hand_side,image_role,storage_path,validation_status,validation_notes")
+    .select("id,reading_id,owner_user_id,hand_side,image_role,storage_path,validation_status,validation_notes,anatomical_validation_status")
     .eq("id", imageId)
     .eq("reading_id", readingId)
     .single();
@@ -21,6 +21,9 @@ export async function POST(
   if (!image || image.owner_user_id !== user.id) return apiError("IMAGE_NOT_FOUND", "Image not found", 404);
   if (image.validation_status !== "accepted") {
     return apiError("TECHNICAL_VALIDATION_REQUIRED", "Technical validation must pass before anatomical validation", 409);
+  }
+  if (image.anatomical_validation_status === "accepted") {
+    return apiSuccess({ id: image.id, status: "completed", accepted: true }, 200);
   }
 
   let notes: Record<string, unknown> = {};
@@ -76,6 +79,11 @@ export async function POST(
 
   if (insertError || !run) return apiError("VISION_JOB_CREATE_FAILED", "Could not queue anatomical validation", 500, true);
 
-  await supabase.from("readings").update({ status: "validating", updated_at: new Date().toISOString() }).eq("id", readingId);
+  const timestamp = new Date().toISOString();
+  await Promise.all([
+    supabase.from("reading_images").update({ anatomical_validation_status: "pending", anatomical_validation_result: null }).eq("id", imageId),
+    supabase.from("readings").update({ status: "validating", updated_at: timestamp }).eq("id", readingId),
+  ]);
+
   return apiSuccess(run, 202);
 }
