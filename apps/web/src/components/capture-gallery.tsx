@@ -44,6 +44,21 @@ export function CaptureGallery({ readingId, captures }: Props) {
     }
   }
 
+  async function queueVision(capture: Capture) {
+    setBusyId(capture.id);
+    setMessage("");
+    try {
+      const response = await fetch(`/api/readings/${readingId}/images/${capture.id}/vision`, { method: "POST" });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload?.error?.message ?? "No se pudo preparar la validación anatómica");
+      setMessage(`Validación anatómica en cola · ${payload.data?.validatorVersion ?? "vision-palm-v1"}.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Error inesperado al preparar Vision");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   return (
     <section className="card grid">
       <div>
@@ -67,6 +82,11 @@ export function CaptureGallery({ readingId, captures }: Props) {
             {capture.width && capture.height ? ` · ${capture.width}×${capture.height}` : ""}
           </span>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {capture.validationStatus === "accepted" ? (
+              <button disabled={busyId === capture.id} onClick={() => void queueVision(capture)}>
+                {busyId === capture.id ? "Procesando…" : "Validar anatomía (Vision)"}
+              </button>
+            ) : null}
             <button className="button" disabled={busyId === capture.id} onClick={() => void removeCapture(capture, true)}>
               {busyId === capture.id ? "Procesando…" : "Sustituir"}
             </button>
