@@ -60,12 +60,49 @@ export const RegisterReadingImageSchema = CreateUploadIntentSchema.extend({
   quality: CaptureQualitySchema,
 });
 
+export const VisionPalmValidationRequestSchema = z.object({
+  readingId: z.uuid(),
+  imageId: z.uuid(),
+  handSide: HandSideSchema.refine((value) => value !== "unknown", "Known hand side is required"),
+  imageRole: ImageRoleSchema,
+  storagePath: z.string().min(1).max(500),
+  technicalQuality: CaptureQualitySchema,
+});
+
+export const VisionPalmValidationResultSchema = z.object({
+  imageId: z.uuid(),
+  accepted: z.boolean(),
+  confidence: z.number().min(0).max(1),
+  anatomy: z.object({
+    palmDetected: z.boolean(),
+    fullPalmVisible: z.boolean(),
+    fingersVisible: z.number().int().min(0).max(5),
+    wristVisible: z.boolean(),
+    expectedHandSide: HandSideSchema,
+    detectedHandSide: HandSideSchema,
+  }),
+  issues: z.array(z.enum([
+    "no_palm_detected",
+    "partial_palm",
+    "fingers_cut",
+    "wrist_missing",
+    "wrong_hand_side",
+    "occlusion",
+    "perspective_too_extreme",
+    "other",
+  ])).max(8),
+  notes: z.array(z.string().trim().min(1).max(240)).max(8).default([]),
+  validatorVersion: z.string().trim().min(1).max(80),
+});
+
 export type CreatePersonRequest = z.infer<typeof CreatePersonSchema>;
 export type UpdatePersonRequest = z.infer<typeof UpdatePersonSchema>;
 export type CreateReadingRequest = z.infer<typeof CreateReadingSchema>;
 export type CreateUploadIntentRequest = z.infer<typeof CreateUploadIntentSchema>;
 export type RegisterReadingImageRequest = z.infer<typeof RegisterReadingImageSchema>;
 export type CaptureQuality = z.infer<typeof CaptureQualitySchema>;
+export type VisionPalmValidationRequest = z.infer<typeof VisionPalmValidationRequestSchema>;
+export type VisionPalmValidationResult = z.infer<typeof VisionPalmValidationResultSchema>;
 export type HandSide = z.infer<typeof HandSideSchema>;
 export type ReadingMode = z.infer<typeof ReadingModeSchema>;
 export type ReadingStatus = z.infer<typeof ReadingStatusSchema>;
