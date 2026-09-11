@@ -7,6 +7,7 @@ type Capture = {
   handSide: "left" | "right" | "unknown";
   imageRole: string;
   validationStatus: string;
+  anatomicalValidationStatus: string;
   width: number | null;
   height: number | null;
   previewUrl: string | null;
@@ -51,7 +52,12 @@ export function CaptureGallery({ readingId, captures }: Props) {
       const response = await fetch(`/api/readings/${readingId}/images/${capture.id}/vision`, { method: "POST" });
       const payload = await response.json();
       if (!response.ok) throw new Error(payload?.error?.message ?? "No se pudo preparar la validación anatómica");
-      setMessage(`Validación anatómica en cola · ${payload.data?.validatorVersion ?? "vision-palm-v1"}.`);
+      setItems((current) => current.map((item) => item.id === capture.id
+        ? { ...item, anatomicalValidationStatus: payload.data?.accepted ? "accepted" : "pending" }
+        : item));
+      setMessage(payload.data?.accepted
+        ? "La captura ya estaba validada anatómicamente."
+        : `Validación anatómica en cola · ${payload.data?.validatorVersion ?? "vision-palm-v1"}.`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Error inesperado al preparar Vision");
     } finally {
@@ -81,10 +87,13 @@ export function CaptureGallery({ readingId, captures }: Props) {
             {capture.handSide === "left" ? "Mano izquierda" : capture.handSide === "right" ? "Mano derecha" : "Mano sin identificar"}
             {capture.width && capture.height ? ` · ${capture.width}×${capture.height}` : ""}
           </span>
+          <span>
+            Vision anatómica: {capture.anatomicalValidationStatus === "accepted" ? "✓ aceptada" : capture.anatomicalValidationStatus === "rejected" ? "✕ rechazada" : capture.anatomicalValidationStatus === "running" ? "… procesando" : capture.anatomicalValidationStatus === "failed" ? "⚠ error" : "pendiente"}
+          </span>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            {capture.validationStatus === "accepted" ? (
-              <button disabled={busyId === capture.id} onClick={() => void queueVision(capture)}>
-                {busyId === capture.id ? "Procesando…" : "Validar anatomía (Vision)"}
+            {capture.validationStatus === "accepted" && capture.anatomicalValidationStatus !== "accepted" ? (
+              <button disabled={busyId === capture.id || capture.anatomicalValidationStatus === "running"} onClick={() => void queueVision(capture)}>
+                {busyId === capture.id ? "Procesando…" : capture.anatomicalValidationStatus === "failed" || capture.anatomicalValidationStatus === "rejected" ? "Reintentar Vision" : "Validar anatomía (Vision)"}
               </button>
             ) : null}
             <button className="button" disabled={busyId === capture.id} onClick={() => void removeCapture(capture, true)}>
