@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
+import { CaptureGallery } from "@/components/capture-gallery";
 import { GuidedCapture } from "@/components/guided-capture";
 import { getAuthenticatedContext } from "@/lib/auth";
 
@@ -22,7 +23,7 @@ export default async function ReadingPage({ params }: { params: Promise<{ readin
     supabase.from("persons").select("alias").eq("id", reading.person_id).single(),
     supabase
       .from("reading_images")
-      .select("id,hand_side,image_role,validation_status,width,height,created_at")
+      .select("id,hand_side,image_role,validation_status,width,height,storage_path,created_at")
       .eq("reading_id", readingId)
       .order("created_at", { ascending: true }),
   ]);
@@ -32,6 +33,19 @@ export default async function ReadingPage({ params }: { params: Promise<{ readin
       .filter((image) => image.image_role === "palm" && image.validation_status === "accepted")
       .map((image) => image.hand_side),
   );
+
+  const captures = await Promise.all((images ?? []).map(async (image) => {
+    const { data } = await supabase.storage.from("reading-images").createSignedUrl(image.storage_path, 600);
+    return {
+      id: image.id,
+      handSide: image.hand_side as "left" | "right" | "unknown",
+      imageRole: image.image_role,
+      validationStatus: image.validation_status,
+      width: image.width,
+      height: image.height,
+      previewUrl: data?.signedUrl ?? null,
+    };
+  }));
 
   return (
     <main className="grid">
@@ -50,17 +64,7 @@ export default async function ReadingPage({ params }: { params: Promise<{ readin
       </section>
 
       <GuidedCapture readingId={readingId} />
-
-      <section className="card grid">
-        <strong>Capturas registradas</strong>
-        {images?.length ? images.map((image) => (
-          <span key={image.id}>
-            {image.validation_status === "accepted" ? "✓" : image.validation_status === "rejected" ? "✕" : "…"}{" "}
-            {image.hand_side === "left" ? "Mano izquierda" : "Mano derecha"} · {image.image_role} · {image.validation_status}
-            {image.width && image.height ? ` · ${image.width}×${image.height}` : ""}
-          </span>
-        )) : <p>Aún no hay fotografías registradas para esta lectura.</p>}
-      </section>
+      <CaptureGallery readingId={readingId} captures={captures} />
     </main>
   );
 }
