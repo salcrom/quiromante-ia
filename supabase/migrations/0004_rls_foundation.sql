@@ -1,0 +1,11 @@
+alter table public.persons enable row level security;
+alter table public.readings enable row level security;
+alter table public.analysis_runs enable row level security;
+create policy "persons_select_own" on public.persons for select to authenticated using (owner_user_id = auth.uid());
+create policy "persons_insert_own" on public.persons for insert to authenticated with check (owner_user_id = auth.uid());
+create policy "persons_update_own" on public.persons for update to authenticated using (owner_user_id = auth.uid()) with check (owner_user_id = auth.uid());
+create policy "persons_delete_own" on public.persons for delete to authenticated using (owner_user_id = auth.uid());
+create policy "readings_select_own" on public.readings for select to authenticated using (exists (select 1 from public.persons p where p.id = readings.person_id and p.owner_user_id = auth.uid()));
+create policy "readings_insert_own" on public.readings for insert to authenticated with check (exists (select 1 from public.persons p where p.id = readings.person_id and p.owner_user_id = auth.uid()));
+create policy "readings_update_own" on public.readings for update to authenticated using (exists (select 1 from public.persons p where p.id = readings.person_id and p.owner_user_id = auth.uid()));
+create policy "analysis_runs_select_own" on public.analysis_runs for select to authenticated using (exists (select 1 from public.readings r join public.persons p on p.id = r.person_id where r.id = analysis_runs.reading_id and p.owner_user_id = auth.uid()));
