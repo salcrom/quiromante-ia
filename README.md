@@ -5,7 +5,8 @@ PWA de análisis quiromántico asistido por IA, estructurada para separar observ
 ## Estado
 
 - BOOT-001 — Foundation: integrado en `main`.
-- M1 — Expedientes: implementación en curso (`feature/m1-expedientes`).
+- M1 — Expedientes, Auth y RLS: integrado en `main`.
+- M2 — Captura: en desarrollo (`feature/m2-captura`).
 
 ## Stack
 
@@ -13,24 +14,29 @@ PWA de análisis quiromántico asistido por IA, estructurada para separar observ
 - Next.js 16.3.4
 - React 19.3
 - npm workspaces
-- Supabase Auth + PostgreSQL + RLS
+- Supabase Auth + PostgreSQL + RLS + Storage privado
 - PWA manual con manifest + service worker
 - servicios `vision`, `interpretation` y `reporting` desacoplados
 - contratos compartidos con Zod
 
-## M1 — Expedientes
+## M2 — Captura
 
-Incluye autenticación email/contraseña, expedientes `persons`, creación de `readings`, API tipada, páginas protegidas y endurecimiento RLS.
+Objetivo: capturar imágenes de ambas palmas desde móvil, mantenerlas privadas y preparar una validación técnica previa al análisis.
 
-Para activar Supabase en local copia `apps/web/.env.example` a `.env.local` y completa:
+Incluye en esta rama:
 
-```text
-NEXT_PUBLIC_SUPABASE_URL=...
-NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=...
-```
+- cámara/selector de imagen con `capture="environment"`;
+- selección de mano izquierda/derecha;
+- máximo 15 MB y formatos JPEG, PNG, WebP, HEIC y HEIF;
+- bucket privado `reading-images`;
+- rutas de Storage segregadas por usuario y lectura;
+- upload intents firmados;
+- registro `reading_images` protegido por RLS;
+- estado de lectura `capturing` durante la captura;
+- estado de validación de imagen preparado (`pending`, `accepted`, `rejected`).
 
-Después aplica las migraciones y ejecuta `npm install && npm run dev`.
+Para activar Supabase en local copia `apps/web/.env.example` a `.env.local`, completa las credenciales y aplica las migraciones antes de ejecutar `npm install && npm run dev`.
 
-## Siguiente hito
+## Siguiente paso M2
 
-M2 — Captura: cámara guiada, Storage privado, upload intents y validación básica de fotografías.
+Añadir validación automática básica de calidad (resolución, desenfoque, iluminación y encuadre), gestión de recaptura y transición de la lectura a `ready` cuando se cumpla el mínimo de evidencias exigido.
